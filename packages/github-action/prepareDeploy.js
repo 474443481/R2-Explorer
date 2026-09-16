@@ -37,7 +37,7 @@ if (!R2EXPLORER_CONFIG) {
 let wranglerConfig = `name = "${R2EXPLORER_WORKER_NAME}"
 compatibility_date = "2024-11-06"
 main = "src/index.ts"
-assets = { directory = "node_modules/r2-explorer/dashboard", binding = "ASSETS", html_handling = "auto-trailing-slash", not_found_handling = "single-page-application", run_worker_first = ["/api/*"] }
+assets = { directory = "node_modules/r2-explorer/dashboard", binding = "ASSETS", html_handling = "auto-trailing-slash", not_found_handling = "single-page-application", run_worker_first = ["/api/*", "/share/*"] }
 `;
 
 if (R2EXPLORER_DOMAIN) {
@@ -89,21 +89,11 @@ if (!fs.existsSync(`${baseDir}/src/`)) {
 	fs.mkdirSync(`${baseDir}/src/`, { recursive: true });
 }
 
-// Create index.ts - THE CRITICAL PART
-// Pass R2EXPLORER_CONFIG as a quoted string literal
-console.log("Creating index.ts with config...");
-console.log("Config to be stringified:", R2EXPLORER_CONFIG);
-
-// Escape the config properly for JavaScript string literal
-const escapedConfig = R2EXPLORER_CONFIG
-	.replace(/\\/g, '\\\\')  // Escape backslashes first
-	.replace(/"/g, '\\"')     // Escape double quotes
-	.replace(/`/g, '\\`')     // Escape backticks
-	.replace(/\$/g, '\\$');   // Escape dollar signs
-
+// Create index.ts
+// R2EXPLORER_CONFIG is a TS object literal, inserted as-is (upstream design)
 const indexTsContent = `import { R2Explorer } from "r2-explorer";
 
-export default R2Explorer("${escapedConfig}");
+export default R2Explorer(${R2EXPLORER_CONFIG});
 `;
 
 console.log("Generated index.ts content:");
