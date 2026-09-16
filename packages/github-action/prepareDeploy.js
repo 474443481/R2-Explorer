@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const WORKERS_CI = process.env.WORKERS_CI;
 let R2EXPLORER_WORKER_NAME = process.env.R2EXPLORER_WORKER_NAME;
 const R2EXPLORER_BUCKETS = process.env.R2EXPLORER_BUCKETS;
-const R2EXPLORER_CONFIG = process.env.R2EXPLORER_CONFIG;
+let R2EXPLORER_CONFIG = process.env.R2EXPLORER_CONFIG;
 const R2EXPLORER_DOMAIN = process.env.R2EXPLORER_DOMAIN;
 const CF_API_TOKEN = process.env.CF_API_TOKEN;
 
@@ -34,7 +34,28 @@ if (!R2EXPLORER_CONFIG) {
 	process.exit(1);
 }
 
-console.log("R2EXPLORER_CONFIG:", R2EXPLORER_CONFIG);
+console.log("=== DEBUG INFO ===");
+console.log("R2EXPLORER_CONFIG raw:", R2EXPLORER_CONFIG);
+console.log("R2EXPLORER_CONFIG type:", typeof R2EXPLORER_CONFIG);
+
+// Try to parse as JSON if it looks like JSON
+let parsedConfig;
+try {
+	// If it's already a string representation of JSON, parse and re-stringify it
+	if (typeof R2EXPLORER_CONFIG === 'string' && R2EXPLORER_CONFIG.trim().startsWith('{')) {
+		parsedConfig = JSON.parse(R2EXPLORER_CONFIG);
+		R2EXPLORER_CONFIG = JSON.stringify(parsedConfig);
+	} else {
+		// Treat it as a raw value and stringify it
+		R2EXPLORER_CONFIG = JSON.stringify(R2EXPLORER_CONFIG);
+	}
+	console.log("R2EXPLORER_CONFIG after processing:", R2EXPLORER_CONFIG);
+} catch (e) {
+	console.error("Error processing R2EXPLORER_CONFIG:", e.message);
+	// Fallback: just stringify whatever we have
+	R2EXPLORER_CONFIG = JSON.stringify(R2EXPLORER_CONFIG);
+	console.log("R2EXPLORER_CONFIG (fallback):", R2EXPLORER_CONFIG);
+}
 
 let wranglerConfig = `name = "${R2EXPLORER_WORKER_NAME}"
 compatibility_date = "2024-11-06"
@@ -79,27 +100,39 @@ preview_bucket_name = '${bucketName}'
   }
 }
 
-console.log("Generated wrangler.toml:");
+console.log("=== Generated wrangler.toml ===");
 console.log(wranglerConfig);
+console.log("=== END wrangler.toml ===");
+
 fs.writeFileSync(`${baseDir}/wrangler.toml`, wranglerConfig);
+console.log(`✅ wrangler.toml written to ${baseDir}/wrangler.toml`);
 
 if (!fs.existsSync(`${baseDir}/src/`)) {
 	fs.mkdirSync(`${baseDir}/src/`);
+	console.log(`✅ Created ${baseDir}/src/ directory`);
 }
 
-// Create index.ts with the config as a quoted string
-// This ensures the JSON is properly escaped and treated as a string literal
-const configJson = JSON.stringify(R2EXPLORER_CONFIG);
-const indexTsContent = `import { R2Explorer } from "r2-explorer";
+// Create index.ts - parse the config properly
+let indexTsContent;
+try {
+	// Try to parse the config to validate it
+	const configObj = JSON.parse(R2EXPLORER_CONFIG);
+	console.log("✅ R2EXPLORER_CONFIG is valid JSON");
+	indexTsContent = `import { R2Explorer } from "r2-explorer";
 
-export default R2Explorer(${configJson});
+export default R2Explorer(${R2EXPLORER_CONFIG});
 `;
+} catch (e) {
+	console.error("❌ Error: R2EXPLORER_CONFIG is not valid JSON:", e.message);
+	console.error("Value:", R2EXPLORER_CONFIG);
+	process.exit(1);
+}
 
-console.log("Generated src/index.ts:");
+console.log("=== Generated src/index.ts ===");
 console.log(indexTsContent);
-fs.writeFileSync(
-	`${baseDir}/src/index.ts`,
-	indexTsContent,
-);
+console.log("=== END src/index.ts ===");
 
-console.log("✅ prepareDeploy.js completed successfully");
+fs.writeFileSync(`${baseDir}/src/index.ts`, indexTsContent);
+console.log(`✅ src/index.ts written to ${baseDir}/src/index.ts`);
+
+console.log("\n✅ prepareDeploy.js completed successfully\n");
