@@ -34,8 +34,9 @@ if (!R2EXPLORER_CONFIG) {
 	process.exit(1);
 }
 
-let wranglerConfig = `
-name = "${R2EXPLORER_WORKER_NAME}"
+console.log("R2EXPLORER_CONFIG:", R2EXPLORER_CONFIG);
+
+let wranglerConfig = `name = "${R2EXPLORER_WORKER_NAME}"
 compatibility_date = "2024-11-06"
 main = "src/index.ts"
 assets = { directory = "node_modules/r2-explorer/dashboard", binding = "ASSETS", html_handling = "auto-trailing-slash", not_found_handling = "single-page-application", run_worker_first = ["/api/*"] }
@@ -78,6 +79,7 @@ preview_bucket_name = '${bucketName}'
   }
 }
 
+console.log("Generated wrangler.toml:");
 console.log(wranglerConfig);
 fs.writeFileSync(`${baseDir}/wrangler.toml`, wranglerConfig);
 
@@ -85,14 +87,17 @@ if (!fs.existsSync(`${baseDir}/src/`)) {
 	fs.mkdirSync(`${baseDir}/src/`);
 }
 
-// Create index.ts with properly quoted config
+// Create index.ts with the config
 const indexTsContent = `import { R2Explorer } from "r2-explorer";
 
 export default R2Explorer(${R2EXPLORER_CONFIG});
 `;
 
+console.log("Generated src/index.ts:");
 console.log(indexTsContent);
 fs.writeFileSync(
 	`${baseDir}/src/index.ts`,
 	indexTsContent,
 );
+
+console.log("✅ prepareDeploy.js completed successfully");
