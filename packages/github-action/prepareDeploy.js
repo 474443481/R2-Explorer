@@ -87,10 +87,12 @@ if (!fs.existsSync(`${baseDir}/src/`)) {
 	fs.mkdirSync(`${baseDir}/src/`);
 }
 
-// Create index.ts with the config
+// Create index.ts with the config as a quoted string
+// This ensures the JSON is properly escaped and treated as a string literal
+const configJson = JSON.stringify(R2EXPLORER_CONFIG);
 const indexTsContent = `import { R2Explorer } from "r2-explorer";
 
-export default R2Explorer(${R2EXPLORER_CONFIG});
+export default R2Explorer(${configJson});
 `;
 
 console.log("Generated src/index.ts:");
