@@ -85,22 +85,14 @@ if (!fs.existsSync(`${baseDir}/src/`)) {
 	fs.mkdirSync(`${baseDir}/src/`);
 }
 
-// Escape the config for safe JavaScript string insertion
-const escapedConfig = R2EXPLORER_CONFIG
-	.replace(/\\/g, '\\\\')
-	.replace(/`/g, '\\`')
-	.replace(/\$/g, '\\$');
-
-console.log(`
-import { R2Explorer } from "r2-explorer";
+// Create index.ts with properly quoted config
+const indexTsContent = `import { R2Explorer } from "r2-explorer";
 
 export default R2Explorer(${R2EXPLORER_CONFIG});
-`);
+`;
+
+console.log(indexTsContent);
 fs.writeFileSync(
 	`${baseDir}/src/index.ts`,
-	`
-import { R2Explorer } from "r2-explorer";
-
-export default R2Explorer(${escapedConfig});
-`,
+	indexTsContent,
 );
