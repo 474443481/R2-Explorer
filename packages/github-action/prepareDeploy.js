@@ -1,62 +1,47 @@
 // @ts-ignore
 const fs = require("node:fs");
 
-const WORKERS_CI = process.env.WORKERS_CI;
-let R2EXPLORER_WORKER_NAME = process.env.R2EXPLORER_WORKER_NAME;
+const R2EXPLORER_WORKER_NAME = process.env.R2EXPLORER_WORKER_NAME;
 const R2EXPLORER_BUCKETS = process.env.R2EXPLORER_BUCKETS;
-let R2EXPLORER_CONFIG = process.env.R2EXPLORER_CONFIG;
+const R2EXPLORER_CONFIG = process.env.R2EXPLORER_CONFIG;
 const R2EXPLORER_DOMAIN = process.env.R2EXPLORER_DOMAIN;
-const CF_API_TOKEN = process.env.CF_API_TOKEN;
 
 let baseDir = __dirname;
-if (WORKERS_CI === "1") {
-	baseDir = process.env.PWD;
-	R2EXPLORER_WORKER_NAME = R2EXPLORER_WORKER_NAME || "r2-explorer";
-} else {
-	if (!CF_API_TOKEN) {
-		console.error("CF_API_TOKEN variable is required to continue!");
-		process.exit(1);
-	}
-}
 
+// Validate required environment variables
 if (!R2EXPLORER_WORKER_NAME) {
-	console.error("R2EXPLORER_WORKER_NAME variable is required to continue!");
+	console.error("❌ R2EXPLORER_WORKER_NAME variable is required to continue!");
 	process.exit(1);
 }
 
 if (!R2EXPLORER_BUCKETS) {
-	console.error("R2EXPLORER_BUCKETS variable is required to continue!");
+	console.error("❌ R2EXPLORER_BUCKETS variable is required to continue!");
 	process.exit(1);
 }
 
 if (!R2EXPLORER_CONFIG) {
-	console.error("R2EXPLORER_CONFIG variable is required to continue!");
+	console.error("❌ R2EXPLORER_CONFIG variable is required to continue!");
 	process.exit(1);
 }
 
-console.log("=== DEBUG INFO ===");
-console.log("R2EXPLORER_CONFIG raw:", R2EXPLORER_CONFIG);
-console.log("R2EXPLORER_CONFIG type:", typeof R2EXPLORER_CONFIG);
+console.log("✅ All required environment variables are set");
+console.log("=== Starting prepareDeploy.js ===\n");
 
-// Try to parse as JSON if it looks like JSON
-let parsedConfig;
+// Validate and prepare config
+console.log("Validating R2EXPLORER_CONFIG...");
+let configObj;
 try {
-	// If it's already a string representation of JSON, parse and re-stringify it
-	if (typeof R2EXPLORER_CONFIG === 'string' && R2EXPLORER_CONFIG.trim().startsWith('{')) {
-		parsedConfig = JSON.parse(R2EXPLORER_CONFIG);
-		R2EXPLORER_CONFIG = JSON.stringify(parsedConfig);
-	} else {
-		// Treat it as a raw value and stringify it
-		R2EXPLORER_CONFIG = JSON.stringify(R2EXPLORER_CONFIG);
-	}
-	console.log("R2EXPLORER_CONFIG after processing:", R2EXPLORER_CONFIG);
+	configObj = JSON.parse(R2EXPLORER_CONFIG);
+	console.log("✅ R2EXPLORER_CONFIG is valid JSON");
 } catch (e) {
-	console.error("Error processing R2EXPLORER_CONFIG:", e.message);
-	// Fallback: just stringify whatever we have
-	R2EXPLORER_CONFIG = JSON.stringify(R2EXPLORER_CONFIG);
-	console.log("R2EXPLORER_CONFIG (fallback):", R2EXPLORER_CONFIG);
+	console.error("❌ R2EXPLORER_CONFIG is not valid JSON:");
+	console.error("   Error:", e.message);
+	console.error("   Value:", R2EXPLORER_CONFIG);
+	process.exit(1);
 }
 
+// Generate wrangler.toml - ONLY TOML CONFIG, NO JSON
+console.log("\nGenerating wrangler.toml...");
 let wranglerConfig = `name = "${R2EXPLORER_WORKER_NAME}"
 compatibility_date = "2024-11-06"
 main = "src/index.ts"
@@ -76,17 +61,24 @@ workers_dev = true
 `;
 }
 
-for (const rawBucket of R2EXPLORER_BUCKETS.split("\n")) {
+// Add R2 bucket bindings
+console.log("Processing R2EXPLORER_BUCKETS...");
+const buckets = R2EXPLORER_BUCKETS.split("\n").filter(line => line.trim());
+console.log(`Found ${buckets.length} bucket(s)`);
+
+for (const rawBucket of buckets) {
   const bucket = rawBucket.trim();
-  if (!bucket) continue; // skip empty lines
+  if (!bucket) continue;
+  
   const split = bucket.split(":");
   if (split.length !== 2 && split.length !== 3) {
-    console.error("R2EXPLORER_BUCKETS is not set correctly!");
-    console.error(`"${bucket}" is not in the correct format => ALIAS:BUCKET_NAME[:JURISDICTION]`);
+    console.error("❌ R2EXPLORER_BUCKETS format error!");
+    console.error(`   "${bucket}" is not in the correct format => ALIAS:BUCKET_NAME[:JURISDICTION]`);
     process.exit(1);
   }
 
   const [alias, bucketName, jurisdiction] = split;
+  console.log(`  - Adding bucket: ${alias} -> ${bucketName}${jurisdiction ? ` (${jurisdiction})` : ''}`);
 
   wranglerConfig += `
 [[r2_buckets]]
@@ -100,39 +92,28 @@ preview_bucket_name = '${bucketName}'
   }
 }
 
-console.log("=== Generated wrangler.toml ===");
-console.log(wranglerConfig);
-console.log("=== END wrangler.toml ===");
-
+console.log("\n📄 Writing wrangler.toml...");
 fs.writeFileSync(`${baseDir}/wrangler.toml`, wranglerConfig);
-console.log(`✅ wrangler.toml written to ${baseDir}/wrangler.toml`);
+console.log(`✅ wrangler.toml written successfully`);
 
+// Create src directory if needed
 if (!fs.existsSync(`${baseDir}/src/`)) {
-	fs.mkdirSync(`${baseDir}/src/`);
-	console.log(`✅ Created ${baseDir}/src/ directory`);
+	fs.mkdirSync(`${baseDir}/src/`, { recursive: true });
+	console.log("✅ Created src/ directory");
 }
 
-// Create index.ts - parse the config properly
-let indexTsContent;
-try {
-	// Try to parse the config to validate it
-	const configObj = JSON.parse(R2EXPLORER_CONFIG);
-	console.log("✅ R2EXPLORER_CONFIG is valid JSON");
-	indexTsContent = `import { R2Explorer } from "r2-explorer";
+// Generate index.ts - Pass config as JSON string
+console.log("\n📝 Creating src/index.ts...");
+const configJsonString = JSON.stringify(R2EXPLORER_CONFIG);
+const indexTsContent = `import { R2Explorer } from "r2-explorer";
 
-export default R2Explorer(${R2EXPLORER_CONFIG});
+export default R2Explorer(${configJsonString});
 `;
-} catch (e) {
-	console.error("❌ Error: R2EXPLORER_CONFIG is not valid JSON:", e.message);
-	console.error("Value:", R2EXPLORER_CONFIG);
-	process.exit(1);
-}
-
-console.log("=== Generated src/index.ts ===");
-console.log(indexTsContent);
-console.log("=== END src/index.ts ===");
 
 fs.writeFileSync(`${baseDir}/src/index.ts`, indexTsContent);
-console.log(`✅ src/index.ts written to ${baseDir}/src/index.ts`);
+console.log("✅ src/index.ts created successfully");
 
-console.log("\n✅ prepareDeploy.js completed successfully\n");
+console.log("\n=== prepareDeploy.js completed successfully ===");
+console.log("\n📦 Generated files:");
+console.log("   - wrangler.toml");
+console.log("   - src/index.ts\n");
